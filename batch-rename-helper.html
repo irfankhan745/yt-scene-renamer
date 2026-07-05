@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Batch Rename Helper — Sync Your AI-Generated Scenes</title>
+<meta name="description" content="Free browser tool to rename AI-generated scene images and videos so filenames always match their scene number. No upload, no signup — everything runs in your browser.">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Batch Rename Helper — Sync Your AI-Generated Scenes">
+<meta property="og:description" content="Upload your scene images/videos, tag each with a scene number, download a perfectly renamed ZIP. 100% browser-based, nothing leaves your device.">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Batch Rename Helper — Sync Your AI-Generated Scenes">
+<meta name="twitter:description" content="Free tool to rename AI-generated scene images/videos so filenames match scene numbers.">
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%230f1117%22/><text x=%2250%22 y=%2266%22 font-size=%2258%22 text-anchor=%22middle%22 fill=%22%23378ADD%22 font-family=%22monospace%22 font-weight=%22bold%22>#</text></svg>">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1117;
+    --card:#1a1d27;
+    --card-hover:#20232f;
+    --border:#2a2e3a;
+    --accent:#378ADD;
+    --accent-soft:rgba(55,138,221,0.14);
+    --text:#e6e8ee;
+    --text-dim:#8a90a2;
+    --text-faint:#5a6072;
+    --green:#3ecf8e;
+    --amber:#e0a94c;
+    --mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    padding:32px 20px 80px;
+  }
+  .wrap{max-width:940px;margin:0 auto;}
+
+  header{margin-bottom:28px;}
+  .eyebrow{
+    font-family:var(--mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;
+    color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:8px;
+  }
+  .eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);}
+  h1{font-size:28px;font-weight:650;margin:0 0 6px;letter-spacing:-0.01em;}
+  .sub{color:var(--text-dim);font-size:14.5px;line-height:1.5;max-width:640px;}
+
+  .settings{
+    display:flex;flex-wrap:wrap;gap:14px;
+    background:var(--card);border:1px solid var(--border);border-radius:12px;
+    padding:16px 18px;margin-bottom:20px;align-items:flex-end;
+  }
+  .field{display:flex;flex-direction:column;gap:6px;}
+  .field label{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.06em;font-family:var(--mono);}
+
+  .mode-toggle{display:flex;background:#12141c;border:1px solid var(--border);border-radius:9px;padding:3px;}
+  .mode-toggle button{
+    border:none;background:transparent;color:var(--text-dim);
+    padding:7px 16px;border-radius:7px;font-size:13.5px;font-weight:600;
+    cursor:pointer;transition:all .15s ease;font-family:var(--sans);
+    display:flex;align-items:center;gap:6px;
+  }
+  .mode-toggle button.active{background:var(--accent);color:#fff;}
+  .mode-toggle button:not(.active):hover{color:var(--text);}
+  .mode-toggle .tag{
+    font-family:var(--mono);font-size:10px;background:rgba(255,255,255,0.12);
+    padding:1px 6px;border-radius:20px;
+  }
+  .mode-toggle button.active .tag{background:rgba(255,255,255,0.25);}
+
+  select, .num-input, .text-input{
+    background:#12141c;border:1px solid var(--border);color:var(--text);
+    border-radius:7px;padding:7px 10px;font-size:13.5px;font-family:var(--mono);
+    outline:none;
+  }
+  select:focus,.num-input:focus,.text-input:focus{border-color:var(--accent);}
+
+  #prefixInput{
+    width:110px;color:var(--accent);font-weight:650;
+    background:var(--accent-soft);border:1px solid rgba(55,138,221,0.3);
+  }
+
+  .spacer{flex:1;}
+  .btn-ghost{
+    background:transparent;border:1px solid var(--border);color:var(--text-dim);
+    padding:8px 14px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600;
+    transition:all .15s ease;
+  }
+  .btn-ghost:hover{border-color:var(--text-faint);color:var(--text);}
+
+  .dropzone{
+    border:1.5px dashed var(--border);border-radius:14px;padding:38px 20px;
+    text-align:center;cursor:pointer;background:var(--card);
+    transition:all .18s ease;margin-bottom:22px;
+  }
+  .dropzone.drag{border-color:var(--accent);background:var(--accent-soft);}
+  .dropzone:hover{border-color:var(--text-faint);}
+  .dropzone .icon{font-size:26px;margin-bottom:10px;opacity:.8;}
+  .dropzone .title{font-size:15px;font-weight:600;margin-bottom:4px;}
+  .dropzone .hint{font-size:12.5px;color:var(--text-faint);}
+  input[type=file]{display:none;}
+
+  .list-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+  .list-head h2{font-size:14px;font-weight:650;margin:0;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;}
+  .count-badge{font-family:var(--mono);font-size:12px;color:var(--accent);background:var(--accent-soft);padding:2px 9px;border-radius:20px;}
+
+  #fileList{list-style:none;padding:0;margin:0 0 24px;display:flex;flex-direction:column;gap:8px;}
+  .row{
+    display:flex;align-items:center;gap:12px;
+    background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+    transition:background .12s ease, border-color .12s ease;
+  }
+  .row:hover{background:var(--card-hover);}
+  .row.dragging{opacity:0.4;}
+  .row.dup .newname{color:var(--amber);}
+  .row.dup .dupflag{display:inline;}
+
+  .handle{cursor:grab;color:var(--text-faint);font-size:16px;user-select:none;padding:0 2px;}
+  .handle:active{cursor:grabbing;}
+
+  .thumb{
+    width:38px;height:38px;border-radius:7px;background:#12141c;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    overflow:hidden;border:1px solid var(--border);font-size:16px;
+  }
+  .thumb img{width:100%;height:100%;object-fit:cover;}
+
+  .orig{flex:1;min-width:0;font-size:13px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);}
+
+  .scene-input{
+    width:56px;text-align:center;background:#12141c;border:1px solid var(--border);color:var(--text);
+    border-radius:6px;padding:6px 4px;font-size:13px;font-family:var(--mono);outline:none;
+  }
+  .scene-input:focus{border-color:var(--accent);}
+
+  .arrow{color:var(--text-faint);font-size:13px;}
+
+  .newname{font-family:var(--mono);font-size:13.5px;font-weight:650;color:var(--green);min-width:150px;}
+  .dupflag{
+    display:none;font-family:var(--mono);font-size:10px;color:var(--amber);
+    background:rgba(224,169,76,0.12);padding:2px 6px;border-radius:5px;text-transform:uppercase;letter-spacing:0.04em;
+  }
+
+  .remove-btn{
+    background:transparent;border:none;color:var(--text-faint);cursor:pointer;font-size:16px;
+    padding:4px 6px;border-radius:6px;transition:all .12s ease;
+  }
+  .remove-btn:hover{color:#e05c5c;background:rgba(224,92,92,0.1);}
+
+  .empty-state{text-align:center;padding:30px;color:var(--text-faint);font-size:13.5px;}
+
+  .action-bar{
+    position:sticky;bottom:16px;
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 18px;
+    box-shadow:0 8px 30px rgba(0,0,0,0.4);
+  }
+  .action-bar .info{font-size:13px;color:var(--text-dim);flex:1;min-width:160px;}
+  .action-bar .info strong{color:var(--text);}
+
+  .zip-name-field{display:flex;align-items:center;background:#12141c;border:1px solid var(--border);border-radius:9px;overflow:hidden;}
+  .zip-name-field input{
+    background:transparent;border:none;color:var(--text);padding:10px 4px 10px 12px;
+    font-size:13.5px;font-family:var(--mono);outline:none;width:170px;
+  }
+  .zip-name-field .ext{color:var(--text-faint);padding-right:12px;font-family:var(--mono);font-size:13px;}
+
+  .btn-primary{
+    background:var(--accent);color:#fff;border:none;padding:11px 22px;border-radius:9px;
+    font-size:14px;font-weight:650;cursor:pointer;transition:all .15s ease;
+    box-shadow:0 4px 14px rgba(55,138,221,0.3);white-space:nowrap;
+  }
+  .btn-primary:hover{filter:brightness(1.08);transform:translateY(-1px);}
+  .btn-primary:disabled{opacity:0.4;cursor:not-allowed;transform:none;}
+
+  .toast{
+    position:fixed;bottom:100px;left:50%;transform:translateX(-50%);
+    background:var(--green);color:#04140c;padding:10px 20px;border-radius:9px;
+    font-size:13.5px;font-weight:650;opacity:0;transition:opacity .25s ease;pointer-events:none;
+  }
+  .toast.show{opacity:1;}
+
+  @media (max-width:600px){
+    .orig{display:none;}
+    .settings{flex-direction:column;align-items:stretch;}
+    .action-bar{flex-direction:column;align-items:stretch;}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Scene Sync Utility</div>
+    <h1>Batch Rename Helper</h1>
+    <p class="sub">Upload your generated images or motion videos, assign each one its scene number, and export a ZIP where every filename matches the scene it belongs to. Drop an image and it stays on the image list; drop a video and it switches over automatically.</p>
+  </header>
+
+  <div class="settings">
+    <div class="field">
+      <label>Asset type</label>
+      <div class="mode-toggle">
+        <button id="modeImg" class="active" onclick="setMode('image')">Images <span class="tag" id="tagImg">0</span></button>
+        <button id="modeVid" onclick="setMode('video')">Videos <span class="tag" id="tagVid">0</span></button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Prefix</label>
+      <input class="text-input" id="prefixInput" value="p_n_" oninput="onPrefixEdit()">
+    </div>
+    <div class="field">
+      <label>Padding width</label>
+      <select id="padWidth" onchange="renderList()">
+        <option value="2" selected>04 (2 digits)</option>
+        <option value="3">004 (3 digits)</option>
+        <option value="4">0004 (4 digits)</option>
+      </select>
+    </div>
+    <div class="spacer"></div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button class="btn-ghost" onclick="autoSequence()">Auto-number in order</button>
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button class="btn-ghost" onclick="clearAll()">Clear this list</button>
+    </div>
+  </div>
+
+  <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+    <div class="icon">⬆</div>
+    <div class="title">Drop files here, or click to browse</div>
+    <div class="hint">Images and videos can be dropped together — each lands on its own list</div>
+    <input type="file" id="fileInput" multiple accept="image/*,video/*">
+  </div>
+
+  <div class="list-head">
+    <h2 id="listTitle">Images</h2>
+    <span class="count-badge" id="countBadge">0 files</span>
+  </div>
+
+  <ul id="fileList"></ul>
+
+  <div class="action-bar">
+    <div class="info"><strong id="footerCount">0</strong> files ready — duplicates on the same scene number get an auto suffix (_02, _03)</div>
+    <div class="zip-name-field">
+      <input type="text" id="zipNameInput" placeholder="filename" value="images_renamed">
+      <span class="ext">.zip</span>
+    </div>
+    <button class="btn-primary" id="downloadBtn" onclick="downloadZip()" disabled>Download ZIP</button>
+  </div>
+</div>
+
+<div class="toast" id="toast">ZIP downloaded</div>
+
+<div style="max-width:940px;margin:28px auto 0;text-align:center;font-size:12px;color:var(--text-faint);font-family:var(--mono);">
+  Runs entirely in your browser — files are never uploaded anywhere.
+</div>
+
+<script>
+// Separate state per mode so switching tabs never mixes lists
+const store = {
+  image: { files: [], prefix: 'p_n_', zipName: 'images_renamed' },
+  video: { files: [], prefix: 'v_n_', zipName: 'videos_renamed' }
+};
+let mode = 'image';
+let dragSrcIndex = null;
+
+function setMode(m){
+  // save current zip name back to store before switching
+  store[mode].zipName = document.getElementById('zipNameInput').value;
+  mode = m;
+  document.getElementById('modeImg').classList.toggle('active', m==='image');
+  document.getElementById('modeVid').classList.toggle('active', m==='video');
+  document.getElementById('listTitle').textContent = m==='image' ? 'Images' : 'Videos';
+  document.getElementById('prefixInput').value = store[m].prefix;
+  document.getElementById('zipNameInput').value = store[m].zipName;
+  document.getElementById('fileInput').accept = m==='image' ? 'image/*' : 'video/*';
+  renderList();
+}
+
+function onPrefixEdit(){
+  store[mode].prefix = document.getElementById('prefixInput').value;
+  renderList();
+}
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+
+['dragenter','dragover'].forEach(evt=>{
+  dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.add('drag'); });
+});
+['dragleave','drop'].forEach(evt=>{
+  dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.remove('drag'); });
+});
+dropzone.addEventListener('drop', e=>{ addFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', e=>{ addFiles(e.target.files); fileInput.value=''; });
+
+function addFiles(fileListObj){
+  const arr = Array.from(fileListObj);
+  if(arr.length === 0) return;
+
+  let lastTypeAdded = null;
+
+  arr.forEach((f)=>{
+    const isVideo = f.type.startsWith('video/');
+    const targetMode = isVideo ? 'video' : 'image';
+    const list = store[targetMode].files;
+    const id = 'f' + Date.now() + Math.random().toString(36).slice(2,7);
+    const nextScene = list.length + 1;
+    const entry = { id, file: f, sceneNum: nextScene, thumbUrl: null };
+    if(!isVideo){
+      entry.thumbUrl = URL.createObjectURL(f);
+    }
+    list.push(entry);
+    lastTypeAdded = targetMode;
+  });
+
+  // Auto-switch to whichever type was just added (last one wins if mixed batch)
+  if(lastTypeAdded && lastTypeAdded !== mode){
+    setMode(lastTypeAdded);
+  } else {
+    renderList();
+  }
+}
+
+function autoSequence(){
+  store[mode].files.forEach((f, i)=> f.sceneNum = i + 1);
+  renderList();
+}
+
+function clearAll(){
+  store[mode].files = [];
+  renderList();
+}
+
+function removeFile(id){
+  store[mode].files = store[mode].files.filter(f => f.id !== id);
+  renderList();
+}
+
+function updateScene(id, val){
+  const f = store[mode].files.find(x=>x.id===id);
+  if(f) f.sceneNum = parseInt(val)||1;
+  renderList();
+}
+
+function pad(num, width){ return String(num).padStart(width, '0'); }
+
+function computeNames(){
+  const width = parseInt(document.getElementById('padWidth').value);
+  const prefix = store[mode].prefix || (mode==='image' ? 'p_n_' : 'v_n_');
+  const files = store[mode].files;
+  const seenCount = {};
+  return files.map(f=>{
+    const key = f.sceneNum;
+    seenCount[key] = (seenCount[key]||0) + 1;
+    const seq = seenCount[key];
+    let base = prefix + pad(key, width);
+    if(seq > 1) base += '_' + pad(seq, 2);
+    const ext = f.file.name.includes('.') ? f.file.name.split('.').pop() : (mode==='image'?'png':'mp4');
+    return { ...f, newName: base + '.' + ext, isDup: seq > 1 };
+  });
+}
+
+function renderList(){
+  const list = document.getElementById('fileList');
+  const named = computeNames();
+  list.innerHTML = '';
+
+  if(named.length === 0){
+    list.innerHTML = '<div class="empty-state">No files yet — drop some above to get started.</div>';
+  }
+
+  named.forEach((f, idx)=>{
+    const li = document.createElement('li');
+    li.className = 'row' + (f.isDup ? ' dup' : '');
+    li.draggable = true;
+    li.dataset.id = f.id;
+
+    li.innerHTML = `
+      <span class="handle">⋮⋮</span>
+      <span class="thumb">${f.thumbUrl ? `<img src="${f.thumbUrl}">` : '▶'}</span>
+      <span class="orig">${f.file.name}</span>
+      <input class="scene-input" type="number" min="1" value="${f.sceneNum}" onchange="updateScene('${f.id}', this.value)">
+      <span class="arrow">→</span>
+      <span class="newname">${f.newName}</span>
+      <span class="dupflag">dup</span>
+      <button class="remove-btn" onclick="removeFile('${f.id}')">✕</button>
+    `;
+
+    li.addEventListener('dragstart', ()=>{ dragSrcIndex = idx; li.classList.add('dragging'); });
+    li.addEventListener('dragend', ()=>{ li.classList.remove('dragging'); });
+    li.addEventListener('dragover', e=> e.preventDefault());
+    li.addEventListener('drop', e=>{
+      e.preventDefault();
+      if(dragSrcIndex === null || dragSrcIndex === idx) return;
+      const arr = store[mode].files;
+      const moved = arr.splice(dragSrcIndex, 1)[0];
+      arr.splice(idx, 0, moved);
+      dragSrcIndex = null;
+      renderList();
+    });
+
+    list.appendChild(li);
+  });
+
+  document.getElementById('tagImg').textContent = store.image.files.length;
+  document.getElementById('tagVid').textContent = store.video.files.length;
+  document.getElementById('countBadge').textContent = named.length + ' file' + (named.length!==1?'s':'');
+  document.getElementById('footerCount').textContent = named.length;
+  document.getElementById('downloadBtn').disabled = named.length === 0;
+}
+
+async function downloadZip(){
+  const named = computeNames();
+  if(named.length === 0) return;
+  const zip = new JSZip();
+  for(const f of named){
+    const buf = await f.file.arrayBuffer();
+    zip.file(f.newName, buf);
+  }
+  const blob = await zip.generateAsync({type:'blob'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const rawName = document.getElementById('zipNameInput').value.trim() || (mode==='image' ? 'images_renamed' : 'videos_renamed');
+  store[mode].zipName = rawName;
+  a.download = rawName.replace(/\.zip$/i,'') + '.zip';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+
+  const toast = document.getElementById('toast');
+  toast.classList.add('show');
+  setTimeout(()=> toast.classList.remove('show'), 1800);
+}
+
+renderList();
+</script>
+
+</body>
+</html>
